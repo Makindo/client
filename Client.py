@@ -14,7 +14,6 @@ Each matching process has three steps:
 import codecs
 import itertools
 import json
-import time
 
 import MySQLdb
 import requests
@@ -167,7 +166,6 @@ def match(person):
     _id, name, gender, age, city, state = None, None, None, None, None, None
 
     # Convert number of results into a status string.
-    # As described in the API documentation, the status string must be quoted.
     if num_results == 0:
         status = "missing"
     elif num_results == 1:
@@ -220,7 +218,7 @@ def patch(person_id, data):
 
     url = 'http://api.makindo.io/persons/{}'.format(person_id)
     r = requests.patch(url, data=data, headers=headers, verify=False)
-    print r.status_code, data
+    print r.status_code, person_id, data
     return r.status_code
 
 
@@ -231,22 +229,25 @@ def write_json(person):
 
 
 def main():
-    for offset in itertools.count():
-        params = {'limit': 1, 'offset': offset, 'start': 1}
+    for offset in itertools.count(start=1, step=100):
+        params = {'limit': 100, 'offset': offset, 'start': 1}
 
         r = requests.get(url, params=params, headers=headers, verify=False)
         if r.status_code != 200:
+            print('Terminated with status code {}'.format(status_code))
             break
 
         persons = r.json().get('persons')
         if not persons:
+            print('Terminated with empty persons object.')
             break
 
         for person in persons:
             write_json(person)
             data = match(person)
             patch(person['id'], data)
-            time.sleep(.25)
+
+    print('Terminated with offset {}.'.format(offset))
 
     conn.close()
 
