@@ -154,7 +154,7 @@ def match(person):
                       CASE WHEN gender = 'M' THEN 'male'
                            WHEN gender = 'F' THEN 'female'
                            ELSE NULL END AS gender,
-                      YEAR(NOW()) - LEFT(birthdate, 4) AS age,
+                      age,
                       city,
                       state
                FROM {}
