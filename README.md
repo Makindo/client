@@ -15,7 +15,7 @@ InfoUSA records. Each matching process has three steps:
 This script was developed using Python 2.7.5 and the following libraries:
 
 * [MySQL-python 1.2.4](https://pypi.python.org/pypi/MySQL-python/1.2.4)
-* [requests 1.2.3](https://pypi.python.org/pypi/requests/1.2.3)
+* [requests 2.0.0](https://pypi.python.org/pypi/requests/1.2.3)
 
 Note also the external file `Parameters.json`, which includes database
 and API connection details. This file resembles the following structure:
@@ -49,8 +49,6 @@ This client uses the Makindo API, so it is necessary to comply with its
   to de-duplicate than matches with hundreds. The second would be the
   version of the matching script. This would allow Makindo to re-match
   some Persons after the matching script is updated.
-* To reduce the burden on the Makindo API, Person objects should be
-  consumed in blocks of 100 and then reported individually.
 
 ## Contributors
 

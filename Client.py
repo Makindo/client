@@ -12,7 +12,6 @@ Each matching process has three steps:
 
 
 import codecs
-import itertools
 import json
 
 import MySQLdb
@@ -34,7 +33,6 @@ c = conn.cursor()
 # Complies with https://github.com/Makindo/api#request-headers.
 headers = {'Authorization': 'Token token="{}"'.format(p['makindo']['token']),
            'Accept': 'application/json', 'Content-Type': 'application/json'}
-url = 'http://api.makindo.io/persons'
 
 
 # List of U.S. state abbreviations. Complies with ANSI standard INCITS 38:2009.
@@ -94,9 +92,9 @@ def parse_names(person):
     try:
         firstname, lastname = person['name'].split()
     except (AttributeError, ValueError):
-        vals = [i for i in person['names'] if all(i.values())]
-        if len(vals) == 1:
-            firstname, lastname = vals[0]['personal'], vals[0]['family']
+        v = [i for i in person['names'] if all(i.values())]
+        if len(v) == 1:
+            firstname, lastname = v[0]['personal'], v[0]['family']
 
     try:
         return (firstname.encode('latin-1'), lastname.encode('latin-1'))
@@ -121,9 +119,9 @@ def parse_locations(person):
     try:
         state = person['location']['state'].upper()
     except AttributeError:
-        vals = {i['state'].upper() for i in person['locations'] if i['state']}
-        if len(vals) == 1:
-            state = vals.pop()
+        v = {i['state'].upper() for i in person['locations'] if i['state']}
+        if len(v) == 1:
+            state = v.pop()
 
     try:
         if state not in states:
@@ -162,7 +160,13 @@ def match(person):
                  AND lastname = %s;""".format(table_name)
     args = (firstname, lastname)
 
-    num_results = c.execute(query, args)
+    try:
+        num_results = c.execute(query, args)
+    except MySQLdb.MySQLError:
+        # Illegal mix of collations occurs because InfoUSA data use the
+        # `(latin1_swedish_ci, IMPLICIT)` collation.
+        return ("failed", None, None, None, None, None, None)
+
     _id, name, gender, age, city, state = None, None, None, None, None, None
 
     # Convert number of results into a status string.
@@ -218,7 +222,7 @@ def patch(person_id, data):
 
     url = 'http://api.makindo.io/persons/{}'.format(person_id)
     r = requests.patch(url, data=data, headers=headers, verify=False)
-    print r.status_code, person_id, data
+    print(r.status_code, person_id, data)
     return r.status_code
 
 
@@ -229,25 +233,31 @@ def write_json(person):
 
 
 def main():
-    for offset in itertools.count(start=1, step=100):
-        params = {'limit': 100, 'offset': offset, 'start': 1}
 
-        r = requests.get(url, params=params, headers=headers, verify=False)
+    url = 'http://api.makindo.io/persons'
+    params = {'offset': 1, 'limit': 100, 'start': 330543}
+    r = requests.get(url, params=params, headers=headers, verify=False)
+
+    data = r.json()
+    url = data['meta']['link']
+
+    while url:
+        r = requests.get(url, headers=headers, verify=False)
+
         if r.status_code != 200:
-            print('Terminated with status code {}'.format(status_code))
+            print('Terminated with status code {}.'.format(r.status_code))
             break
 
-        persons = r.json().get('persons')
-        if not persons:
-            print('Terminated with empty persons object.')
-            break
+        data = r.json()
 
-        for person in persons:
+        for person in data['persons']:
             write_json(person)
-            data = match(person)
-            patch(person['id'], data)
+            resp = match(person)
+            patch(person['id'], resp)
 
-    print('Terminated with offset {}.'.format(offset))
+        url = data['meta']['next']
+
+    print('Terminated with url\n{}.'.format(start))
 
     conn.close()
 
