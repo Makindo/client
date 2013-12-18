@@ -76,17 +76,20 @@ def parse_names(person):
         A tuple of two strings corresponding to the person's first name and
             last name, or a tuple of two Nones if unable to parse names.
     """
-    try:
-        firstname, lastname = person['name'].split()
-    except (AttributeError, ValueError):
+    if person.get('name'):
+        firstname, *middlenames, lastname = person['name'].split()
+    elif person.get('names'):
         v = [i for i in person['names'] if all(i.values())]
-        if len(v) == 1:
-            firstname, lastname = v[0]['personal'], v[0]['family']
+        if len(v) != 1:
+            return None, None
+        firstname, lastname = v[0]['personal'], v[0]['family']
+    else:
+        return None, None
 
     try:
-        return (firstname.encode('latin-1'), lastname.encode('latin-1'))
-    except (NameError, UnicodeEncodeError):
-        return (None, None)
+        return firstname.encode('latin-1'), lastname.encode('latin-1')
+    except UnicodeEncodeError:
+        return None, None
 
 
 def parse_locations(person):
@@ -103,19 +106,19 @@ def parse_locations(person):
         A string corresponding to the person's state, or None if unable to parse
             locations.
     """
-    try:
+    if person.get('location').get('state'):
         state = person['location']['state'].upper()
-    except AttributeError:
+    elif person.get('locations'):
         v = {i['state'].upper() for i in person['locations'] if i['state']}
-        if len(v) == 1:
-            state = v.pop()
-
-    try:
-        if state not in states:
-            return  # Prevent SQL injections via malformed state responses
-        return state
-    except NameError:
+        if len(v) != 1:
+            return
+        state = v.pop()
+    else:
         return
+
+    if state not in states:
+        return  # Prevent SQL injections via malformed state responses
+    return state
 
 
 def match(person):
