@@ -14,7 +14,7 @@ Each matching process has three steps:
 import codecs
 import json
 
-import MySQLdb
+import pymysql
 import requests
 
 
@@ -22,7 +22,7 @@ with open('Parameters.json') as f:
     p = json.load(f)
 
 
-conn = MySQLdb.connect(host=p['mysql']['host'],
+conn = pymysql.connect(host=p['mysql']['host'],
                        user=p['mysql']['user'],
                        passwd=p['mysql']['passwd'],
                        db=p['mysql']['db'])
@@ -144,7 +144,7 @@ def match(person):
     state = parse_locations(person)
 
     if not (firstname and lastname and state):
-        return ("failed", None, None, None, None, None, None)
+        return ('failed', None, None, None, None, None, None)
 
     table_name = '{}_indiv_raw'.format(state.lower())
     query = """SELECT individualid,
@@ -165,21 +165,21 @@ def match(person):
     except MySQLdb.MySQLError:
         # Illegal mix of collations occurs because InfoUSA data use the
         # `(latin1_swedish_ci, IMPLICIT)` collation.
-        return ("failed", None, None, None, None, None, None)
+        return ('failed', None, None, None, None, None, None)
 
     _id, name, gender, age, city, state = None, None, None, None, None, None
 
     # Convert number of results into a status string.
     if num_results == 0:
-        status = "missing"
+        status = 'missing'
     elif num_results == 1:
-        status = "found"
+        status = 'found'
         _id, name, gender, age, city, state = c.fetchone()
         age = int(age) if age < 115 else None  # InfoUSA data are inconsistent
     elif num_results > 1:
-        status = "ambiguous"
+        status = 'ambiguous'
     else:
-        status = "failed"
+        status = 'failed'
 
     return (status, _id, name, gender, age, city, state)
 
@@ -199,23 +199,23 @@ def patch(person_id, data):
     """
     status, _id, name, gender, age, city, state = data
 
-    if status not in {"found", "ambiguous", "missing", "failed"}:
+    if status not in {'found', 'ambiguous', 'missing', 'failed'}:
         raise ValueError("Invalid status: '{}'".format(status))
 
     data = {
-                "person": {
-                    "location": {
-                        "city": city,
-                        "state": state
+                'person': {
+                    'location': {
+                        'city': city,
+                        'state': state
                     },
-                    "gender": gender,
-                    "age": {
-                        "maximum": age,
-                        "minimum": age
+                    'gender': gender,
+                    'age': {
+                        'maximum': age,
+                        'minimum': age
                     },
-                    "external_id": _id,
-                    "name": name,
-                    "status": status
+                    'external_id': _id,
+                    'name': name,
+                    'status': status
                 }
             }
     data = json.dumps(remove_missing(data))
