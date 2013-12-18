@@ -18,14 +18,14 @@ import pymysql
 import requests
 
 
-with open('Parameters.json') as f:
+with open('parameters.json') as f:
     p = json.load(f)
 
 
 conn = pymysql.connect(host=p['mysql']['host'],
                        user=p['mysql']['user'],
                        passwd=p['mysql']['passwd'],
-                       db=p['mysql']['db'])
+                       database=p['mysql']['database'])
 c = conn.cursor()
 
 
@@ -47,26 +47,13 @@ states = ['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC', 'FL', 'GA',
 
 def remove_missing(d):
     """Recursively remove items from a dictionary whose values are None."""
-    for k, v in d.items():
+    for k, v in list(d.items()):
         if not v:
             del d[k]
     for v in d.values():
         if isinstance(v, dict):
             remove_missing(v)
     return d
-
-
-def escape_iterable(args):
-    """Escape an iterable of MySQL query arguments.
-
-    Adapted from: http://stackoverflow.com/a/589416
-
-    Usage:
-        >>> placeholder = escape_iterable(args)
-        >>> query = 'SELECT foo FROM bar WHERE baz IN ({});'.format(placeholder)
-        >>> num_results = c.execute(query, args)
-    """
-    return ', '.join('%s' for _ in args)
 
 
 def parse_names(person):
@@ -144,9 +131,8 @@ def match(person):
     state = parse_locations(person)
 
     if not (firstname and lastname and state):
-        return ('failed', None, None, None, None, None, None)
+        return ('failed', None, None, None, None, None, None, None)
 
-    table_name = '{}_indiv_raw'.format(state.lower())
     query = """SELECT individualid,
                       CONCAT_WS(' ', firstname, lastname) AS name,
                       CASE WHEN gender = 'M' THEN 'male'
@@ -154,34 +140,36 @@ def match(person):
                            ELSE NULL END AS gender,
                       age,
                       city,
-                      state
-               FROM {}
+                      state,
+                      findincome
+               FROM {}_indiv_raw
                WHERE firstname = %s
-                 AND lastname = %s;""".format(table_name)
+                 AND lastname = %s;""".format(state.lower())
     args = (firstname, lastname)
 
     try:
         num_results = c.execute(query, args)
-    except MySQLdb.MySQLError:
+    except:
         # Illegal mix of collations occurs because InfoUSA data use the
         # `(latin1_swedish_ci, IMPLICIT)` collation.
-        return ('failed', None, None, None, None, None, None)
+        return ('failed', None, None, None, None, None, None, None)
 
-    _id, name, gender, age, city, state = None, None, None, None, None, None
+    _id, name, gender, age, city, state, findincome = None, None, None, None, None, None, None
 
     # Convert number of results into a status string.
     if num_results == 0:
         status = 'missing'
     elif num_results == 1:
         status = 'found'
-        _id, name, gender, age, city, state = c.fetchone()
-        age = int(age) if age < 115 else None  # InfoUSA data are inconsistent
+        _id, name, gender, age, city, state, findincome = c.fetchone()
+        age = int(age) if age else None
+        findincome = int(findincome) if findincome else None
     elif num_results > 1:
         status = 'ambiguous'
     else:
         status = 'failed'
 
-    return (status, _id, name, gender, age, city, state)
+    return (status, _id, name, gender, age, city, state, findincome)
 
 
 def patch(person_id, data):
@@ -197,7 +185,7 @@ def patch(person_id, data):
     Returns:
         The status code of the PATCH request.
     """
-    status, _id, name, gender, age, city, state = data
+    status, _id, name, gender, age, city, state, findincome = data
 
     if status not in {'found', 'ambiguous', 'missing', 'failed'}:
         raise ValueError("Invalid status: '{}'".format(status))
@@ -212,6 +200,9 @@ def patch(person_id, data):
                     'age': {
                         'maximum': age,
                         'minimum': age
+                    },
+                    'data': {
+                        'income': findincome
                     },
                     'external_id': _id,
                     'name': name,
@@ -228,7 +219,7 @@ def patch(person_id, data):
 
 def write_json(person):
     """Write a Person record as a JSON object line in a flat file."""
-    with codecs.open('Persons', 'a', 'utf8') as f:
+    with codecs.open('persons', 'a', 'utf8') as f:
         f.write(u'{}\n'.format(json.dumps(person, ensure_ascii=False)))
 
 
